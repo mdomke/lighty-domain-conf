@@ -7,7 +7,7 @@ This simple script is intended for managing domain-configurations of a
 Setup
 -----
 
-To get started you have to adjust the `LIGHTTPD\_CONF\_DIR`-variable at
+To get started you have to adjust the `LIGHTTPD_CONF_DIR`-variable at
 the top of the script to the directory where your lighttpd configuration
 files should be created. The default is `/etc/lighttpd`.
 

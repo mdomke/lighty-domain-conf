@@ -8,21 +8,22 @@ import yaml
 
 from optparse import OptionParser
 
-LIGHTTPD_CONF_DIR = "/etc/lighttpd"
+LIGHTTPD_BASE_DIR = "/etc/lighttpd"
+LIGHTTPD_CONF_DIR = "conf-available"
 
 config_data = """
 files: 
+    domains:   11-domains.conf
     doc-root:  incl-doc-root.conf
-    domains:   incl-domains.conf
     django:    incl-django-fastcgi.conf
     wordpress: incl-wordpress.conf
 
 templates:
     doc-root: >
-        server.document-root = basename + servername + "/pages"
+        server.document-root = basename + servername
 
     vhost: |
-        var.basename = /var/www/
+        var.basename = "/var/www/"
         $HTTP["host"] =~ "^(www\.)?<domainname>$" {
             var.servername = "<domainname>"
             <includes>
@@ -32,7 +33,7 @@ templates:
         fastcgi.server = (
             "/django.fcgi" => (
                 "main" => (
-                    "socket" => "/var/local/django/" + servername + ".sock",
+                    "socket" => "/tmp/django_fcgi_" + servername + ".sock",
                     "check-local" => "disable",
                 )
             ),
@@ -40,10 +41,12 @@ templates:
 
         alias.url = (
             "/media/" => "/var/local/django/contrib/admin/media/",
+            "/static/" => server.document-root
         )
 
         url.rewrite-once = (
             "^(/media.*)$" => "$1",
+            "^(/static.*)$" => "$1",
             "^/favicon\.ico$" => "/media/favicon.ico",
             "^(/.*)$" => "/django.fcgi$1",
         )        
@@ -86,17 +89,19 @@ class LighttpdConfEditor(object):
         if not os.path.exists(domain_config_dir):
             os.makedirs(domain_config_dir)
 
-        for template_name in self.config_data['files']:
-            template_path = os.path.join(domain_config_dir,
-                                         self.config_data['files'][template_name])
+        for template_key, template_file_name in self.config_data['files'].items():
+	    if template_key == 'domains':
+                continue
+
+            template_path = os.path.join(domain_config_dir, template_file_name)
 
             with open(template_path, 'w+') as template_file:
                 try:
-                    template = self.config_data['templates'][template_name]
+                    template = self.config_data['templates'][template_key]
                     template_file.write(template)
                     if self.verbose:
                         print(self.output_prefix, 
-                              "Writing template for module '{0}'".format(template_name))
+                              "Writing template for module '{0}'".format(template_file_name))
                 except KeyError:
                     pass
 
@@ -108,9 +113,9 @@ class LighttpdConfEditor(object):
         """
 
         if self.verbose:
-            print("# Lighttpd conf-dir = '{0}'".format(LIGHTTPD_CONF_DIR))
+            print("# Lighttpd conf-dir = '{0}'".format(LIGHTTPD_BASE_DIR))
 
-        conf_file_path = os.path.join(self.conf_dir, 
+        conf_file_path = os.path.join(self.conf_dir, LIGHTTPD_CONF_DIR,
                                       self.config_data['files']['domains'])
 
         with open(conf_file_path, 'w+') as conf_file:
@@ -118,7 +123,7 @@ class LighttpdConfEditor(object):
             tmp_buffer = [l.strip(" \n") for l in conf_file.readlines()]
 
             for domain in self.domains:
-                include_line = 'include "{0}.conf"'.format(os.path.join("domains", domain))
+                include_line = 'include "{0}.conf"'.format(os.path.join(self.conf_dir, "domains", domain))
 
                 if self.remove or self.exclude:
                     if include_line in tmp_buffer:
@@ -178,7 +183,9 @@ class LighttpdConfEditor(object):
             include_lines = []
             for module in self.include_modules:
                 try:
-                    include_lines.append(self.config_data['files'][module])
+                    include_statement = 'include "{0}"'.format(os.path.join(
+                        self.conf_dir, "domains", self.config_data['files'][module]))
+                    include_lines.append(include_statement)
                 except KeyError:
                     pass
 
@@ -202,8 +209,8 @@ if __name__ == '__main__':
     parser = OptionParser(usage)
 
     parser.add_option("-d", "--dir", dest="conf_dir", 
-                      default=LIGHTTPD_CONF_DIR,
-                      help="Lighttpd configuration directory [{0}]".format(LIGHTTPD_CONF_DIR))
+                      default=LIGHTTPD_BASE_DIR,
+                      help="Lighttpd configuration directory [{0}]".format(LIGHTTPD_BASE_DIR))
 
     parser.add_option("-a", "--add", action="store_false", dest="remove_config",
                      help="Add domainname to configuration")
@@ -237,7 +244,7 @@ if __name__ == '__main__':
 
     if not os.path.exists(options.conf_dir):
         parser.error("""The config dir '{0}' does not exist. You probably hav to modify
-                     the LIGHTTPD_CONF_DIR variable of this script.""".format(options.conf_dir))
+                     the LIGHTTPD_BASE_DIR variable of this script.""".format(options.conf_dir))
 
     config_editor = LighttpdConfEditor(args, options)
 

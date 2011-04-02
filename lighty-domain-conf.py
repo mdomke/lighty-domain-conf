@@ -19,13 +19,14 @@ files:
     wordpress: incl-wordpress.conf
 
 templates:
-    doc-root: >
-        server.document-root = basename + servername
+    doc-root: |
+        server.document-root = basedir + server.name + "/"
+        accesslog.filename = server.document-root + "/log/access.log"
 
     vhost: |
-        var.basename = "/var/www/"
+        var.basedir = "/var/www/"
         $HTTP["host"] =~ "^(www\.)?<domainname>$" {
-            var.servername = "<domainname>"
+            server.name = "<domainname>"
             <includes>
         }
 
@@ -33,15 +34,14 @@ templates:
         fastcgi.server = (
             "/django.fcgi" => (
                 "main" => (
-                    "socket" => "/tmp/django_fcgi_" + servername + ".sock",
+                    "socket" => "/tmp/django_fcgi_" + server.name + ".sock",
                     "check-local" => "disable",
                 )
             ),
         )
 
         alias.url = (
-            "/media/" => "/var/local/django/contrib/admin/media/",
-            "/static/" => server.document-root
+            "/media/" => "/var/local/django/contrib/admin/media/"
         )
 
         url.rewrite-once = (
